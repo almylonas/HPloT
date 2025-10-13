@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Particle Physics Data Analysis</title>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            padding: 30px;
+        }
+        
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 2.5em;
+        }
+        
+        .upload-section {
+            background: #f8f9fa;
+            padding: 25px;
+            border-radius: 10px;
+            margin-bottom: 30px;
+        }
+        
+        .control-group {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
+        }
+        
+        .control-item {
+            display: flex;
+            flex-direction: column;
+        }
+        
+        label {
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: #555;
+        }
+        
+        input[type="file"],
+        input[type="number"],
+        select {
+            padding: 10px;
+            border: 2px solid #ddd;
+            border-radius: 5px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+        
+        input[type="file"]:hover,
+        input[type="number"]:focus,
+        select:focus {
+            border-color: #667eea;
+            outline: none;
+        }
+        
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        input[type="checkbox"] {
+            width: 20px;
+            height: 20px;
+            cursor: pointer;
+        }
+        
+        button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            border-radius: 5px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            margin-top: 20px;
+        }
+        
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+        
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .plots-container {
+            margin-top: 30px;
+        }
+        
+        .plot-item {
+            margin-bottom: 30px;
+            border: 1px solid #e0e0e0;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+        
+        .statistics {
+            margin-top: 40px;
+        }
+        
+        .statistics h2 {
+            color: #333;
+            margin-bottom: 20px;
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 20px;
+        }
+        
+        .stat-table {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 10px;
+        }
+        
+        .stat-table h3 {
+            color: #667eea;
+            margin-bottom: 15px;
+            text-align: center;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        
+        th, td {
+            padding: 10px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        
+        th {
+            background: #667eea;
+            color: white;
+            font-weight: 600;
+        }
+        
+        tr:hover {
+            background: #f0f0f0;
+        }
+        
+        .error {
+            background: #ff4444;
+            color: white;
+            padding: 15px;
+            border-radius: 5px;
+            margin-top: 20px;
+            display: none;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 20px;
+            display: none;
+        }
+        
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>⚛️ Particle Physics Data Analysis</h1>
+        
+        <div class="upload-section">
+            <form id="uploadForm" enctype="multipart/form-data">
+                <div class="control-item">
+                    <label for="file">Upload CSV or TXT File:</label>
+                    <input type="file" id="file" name="file" accept=".csv,.txt" required>
+                </div>
+                
+                <div class="control-group">
+                    <div class="control-item">
+                        <label for="num_bins">Number of Bins:</label>
+                        <input type="number" id="num_bins" name="num_bins" step="1" min="1" value="20">
+                    </div>
+                    
+                    <div class="control-item">
+                        <label for="view_mode">View Mode:</label>
+                        <select id="view_mode" name="view_mode">
+                            <option value="all">All Plots</option>
+                            <option value="dilepton">Dilepton Only</option>
+                            <option value="fourlepton">Four Lepton Only</option>
+                            <option value="diphoton">Diphoton Only</option>
+                        </select>
+                    </div>
+                    
+                    <div class="control-item">
+                        <div class="checkbox-group">
+                            <input type="checkbox" id="log_scale" name="log_scale">
+                            <label for="log_scale" style="margin: 0;">Logarithmic X-Axis</label>
+                        </div>
+                    </div>
+                </div>
+                
+                <button type="submit">Analyze Data</button>
+            </form>
+            
+            <div class="error" id="error"></div>
+            <div class="loading" id="loading">
+                <div class="spinner"></div>
+                <p>Processing data...</p>
+            </div>
+        </div>
+        
+        <div class="plots-container" id="plots"></div>
+        
+        <div class="statistics" id="statistics" style="display: none;">
+            <h2>Statistical Analysis by Energy Range</h2>
+            <div class="stats-grid" id="statsGrid"></div>
+        </div>
+    </div>
+    
+    <script>
+        document.getElementById('uploadForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const formData = new FormData();
+            const fileInput = document.getElementById('file');
+            const numBins = document.getElementById('num_bins').value;
+            const logScale = document.getElementById('log_scale').checked;
+            const viewMode = document.getElementById('view_mode').value;
+            
+            formData.append('file', fileInput.files[0]);
+            formData.append('num_bins', numBins);
+            formData.append('log_scale', logScale);
+            formData.append('view_mode', viewMode);
+            
+            document.getElementById('error').style.display = 'none';
+            document.getElementById('loading').style.display = 'block';
+            document.getElementById('plots').innerHTML = '';
+            document.getElementById('statistics').style.display = 'none';
+            
+            try {
+                const response = await fetch('/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const data = await response.json();
+                
+                if (!response.ok) {
+                    throw new Error(data.error || 'An error occurred');
+                }
+                
+                document.getElementById('loading').style.display = 'none';
+                
+                // Display plots
+                const plotsContainer = document.getElementById('plots');
+                
+                if (data.plots.dilepton) {
+                    const div = document.createElement('div');
+                    div.className = 'plot-item';
+                    div.id = 'dilepton-plot';
+                    plotsContainer.appendChild(div);
+                    Plotly.newPlot('dilepton-plot', JSON.parse(data.plots.dilepton).data, JSON.parse(data.plots.dilepton).layout);
+                }
+                
+                if (data.plots.fourlepton) {
+                    const div = document.createElement('div');
+                    div.className = 'plot-item';
+                    div.id = 'fourlepton-plot';
+                    plotsContainer.appendChild(div);
+                    Plotly.newPlot('fourlepton-plot', JSON.parse(data.plots.fourlepton).data, JSON.parse(data.plots.fourlepton).layout);
+                }
+                
+                if (data.plots.diphoton) {
+                    const div = document.createElement('div');
+                    div.className = 'plot-item';
+                    div.id = 'diphoton-plot';
+                    plotsContainer.appendChild(div);
+                    Plotly.newPlot('diphoton-plot', JSON.parse(data.plots.diphoton).data, JSON.parse(data.plots.diphoton).layout);
+                }
+                
+                // Display statistics
+                displayStatistics(data.statistics);
+                
+            } catch (error) {
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('error').textContent = error.message;
+                document.getElementById('error').style.display = 'block';
+            }
+        });
+        
+        function displayStatistics(stats) {
+            const statsGrid = document.getElementById('statsGrid');
+            statsGrid.innerHTML = '';
+            
+            const particles = [
+                { name: 'Electrons', data: stats.electrons, color: '#667eea' },
+                { name: 'Muons', data: stats.muons, color: '#764ba2' }
+            ];
+            
+            particles.forEach(particle => {
+                const tableDiv = document.createElement('div');
+                tableDiv.className = 'stat-table';
+                
+                let tableHTML = `
+                    <h3>${particle.name}</h3>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Energy Range</th>
+                                <th>Events</th>
+                                <th>Mean (GeV)</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                `;
+                
+                particle.data.forEach(row => {
+                    tableHTML += `
+                        <tr>
+                            <td>${row.range}</td>
+                            <td>${row.events}</td>
+                            <td>${row.mean}</td>
+                        </tr>
+                    `;
+                });
+                
+                tableHTML += `
+                        </tbody>
+                    </table>
+                `;
+                
+                tableDiv.innerHTML = tableHTML;
+                statsGrid.appendChild(tableDiv);
+            });
+            
+            document.getElementById('statistics').style.display = 'block';
+        }
+    </script>
+</body>
+</html>
