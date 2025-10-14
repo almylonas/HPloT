@@ -12,10 +12,12 @@ from flask_sqlalchemy import SQLAlchemy
 app = Flask(__name__)
 
 # Database configuration
-app.config['SQLALCHEMY_DATABASE_URL'] = os.environ.get('DATABASE_URL', 'sqlite:///particle_data.db')
-# Fix for Railway PostgreSQL URLs
-if app.config['SQLALCHEMY_DATABASE_URL'].startswith('postgres://'):
-    app.config['SQLALCHEMY_DATABASE_URL'] = app.config['SQLALCHEMY_DATABASE_URL'].replace('postgres://', 'postgresql://', 1)
+database_url = os.environ.get('DATABASE_URL', 'sqlite:///particle_data.db')
+# Fix for Railway PostgreSQL URLs (they use postgres:// but SQLAlchemy needs postgresql://)
+if database_url.startswith('postgres://'):
+    database_url = database_url.replace('postgres://', 'postgresql://', 1)
+
+app.config['SQLALCHEMY_DATABASE_URI'] = database_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db = SQLAlchemy(app)
