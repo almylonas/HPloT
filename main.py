@@ -2,10 +2,23 @@ from flask import Flask, render_template, request, jsonify
 import pandas as pd
 import plotly.graph_objs as go
 import plotly.utils
+import numpy as np
 import json
 import io
+import os
+from datetime import datetime
+from flask_sqlalchemy import SQLAlchemy
 
 app = Flask(__name__)
+
+# Database configuration
+app.config['SQLALCHEMY_DATABASE_URL'] = os.environ.get('DATABASE_URL', 'sqlite:///particle_data.db')
+# Fix for Railway PostgreSQL URLs
+if app.config['SQLALCHEMY_DATABASE_URL'].startswith('postgres://'):
+    app.config['SQLALCHEMY_DATABASE_URL'] = app.config['SQLALCHEMY_DATABASE_URL'].replace('postgres://', 'postgresql://', 1)
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
+db = SQLAlchemy(app)
 
 # Energy ranges for analysis
 ENERGY_RANGES = {
@@ -16,9 +29,33 @@ ENERGY_RANGES = {
     'R5': (1400, 1600)
 }
 
+# Database Models
+class Group(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), unique=True, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    submissions = db.relationship('Submission', backref='group', lazy=True, cascade='all, delete-orphan')
+
+class Submission(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    group_id = db.Column(db.Integer, db.ForeignKey('group.id'), nullable=False)
+    filename = db.Column(db.String(255), nullable=False)
+    submitted_at = db.Column(db.DateTime, default=datetime.utcnow)
+    data_entries = db.relationship('DataEntry', backref='submission', lazy=True, cascade='all, delete-orphan')
+
+class DataEntry(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    submission_id = db.Column(db.Integer, db.ForeignKey('submission.id'), nullable=False)
+    invariant_mass = db.Column(db.Float, nullable=False)
+    particle_type = db.Column(db.Integer, nullable=False)
+    combination = db.Column(db.String(10), default='')
+
+# Create tables
+with app.app_context():
+    db.create_all()
+
 def parse_csv(file_content):
     """Parse the CSV content and return a DataFrame"""
-    # Try comma separator first, then tab
     try:
         df = pd.read_csv(io.StringIO(file_content.decode('utf-8')), 
                          sep=',', 
@@ -30,29 +67,34 @@ def parse_csv(file_content):
                          header=None,
                          names=['invariant_mass', 'particle_type', 'combination'])
     
-    # Remove rows with empty values in first two columns
     df = df.dropna(subset=['invariant_mass', 'particle_type'])
-    
-    # Convert invariant_mass to float
     df['invariant_mass'] = pd.to_numeric(df['invariant_mass'], errors='coerce')
-    
-    # Handle particle_type - convert to int, keep combination as string
     df['particle_type'] = pd.to_numeric(df['particle_type'], errors='coerce')
-    
-    # Drop rows where conversion failed
     df = df.dropna(subset=['invariant_mass', 'particle_type'])
-    
-    # Convert particle_type to int
     df['particle_type'] = df['particle_type'].astype(int)
-    
-    # Fill NaN in combination column with empty string
     df['combination'] = df['combination'].fillna('').astype(str).str.strip()
     
     return df
 
+def get_dataframe_from_db(group_id=None):
+    """Get DataFrame from database entries"""
+    query = DataEntry.query
+    
+    if group_id:
+        query = query.join(Submission).filter(Submission.group_id == group_id)
+    
+    entries = query.all()
+    
+    data = {
+        'invariant_mass': [e.invariant_mass for e in entries],
+        'particle_type': [e.particle_type for e in entries],
+        'combination': [e.combination for e in entries]
+    }
+    
+    return pd.DataFrame(data)
+
 def calculate_statistics(df, particle_types):
     """Calculate statistics for energy ranges"""
-    # Filter by particle_type
     filtered_df = df[df['particle_type'].isin(particle_types)]
     
     stats = []
@@ -69,7 +111,6 @@ def calculate_statistics(df, particle_types):
             'mean': round(mean, 2) if events > 0 else 'N/A'
         })
     
-    # Add total row
     stats.append({
         'range': 'Total',
         'events': total_events,
@@ -97,14 +138,16 @@ def create_histogram(df, particle_types, title, num_bins, log_scale, show_total=
         3: 'Photons'
     }
     
-    # Use provided number of bins or default to 20
-    bins = int(num_bins) if num_bins and num_bins > 0 else 20
+    bins = num_bins if num_bins and num_bins > 0 else 30
     
-    # For dilepton with total, use stacked mode
     if show_total:
         for ptype in particle_types:
             if isinstance(ptype, int):
                 filtered_df = df[df['particle_type'] == ptype]
+                
+                if log_scale:
+                    filtered_df = filtered_df[filtered_df['invariant_mass'] > 0]
+                
                 label = labels.get(ptype, str(ptype))
                 color = colors.get(ptype, 'gray')
                 
@@ -119,10 +162,8 @@ def create_histogram(df, particle_types, title, num_bins, log_scale, show_total=
                         nbinsx=bins
                     ))
         
-        # Update to stack mode for dilepton
         fig.update_layout(barmode='stack')
     else:
-        # For other plots, use overlay mode
         for ptype in particle_types:
             if isinstance(ptype, int):
                 filtered_df = df[df['particle_type'] == ptype]
@@ -132,6 +173,9 @@ def create_histogram(df, particle_types, title, num_bins, log_scale, show_total=
                 filtered_df = df[df['combination'].str.lower() == ptype.lower()]
                 label = ptype.upper()
                 color = colors.get(ptype.lower(), 'gray')
+            
+            if log_scale:
+                filtered_df = filtered_df[filtered_df['invariant_mass'] > 0]
             
             if len(filtered_df) > 0:
                 mass_values = filtered_df['invariant_mass'].values
@@ -158,6 +202,10 @@ def create_histogram(df, particle_types, title, num_bins, log_scale, show_total=
     if log_scale:
         fig.update_xaxes(type='log')
         fig.update_yaxes(type='log')
+        if len(df[df['invariant_mass'] <= 0]) > 0:
+            fig.update_layout(
+                title=title + " (non-positive values excluded for log scale)"
+            )
     
     return json.dumps(fig, cls=plotly.utils.PlotlyJSONEncoder)
 
@@ -165,8 +213,42 @@ def create_histogram(df, particle_types, title, num_bins, log_scale, show_total=
 def index():
     return render_template('index.html')
 
+@app.route('/api/groups', methods=['GET'])
+def get_groups():
+    """Get all groups"""
+    groups = Group.query.order_by(Group.created_at.desc()).all()
+    return jsonify([{
+        'id': g.id,
+        'name': g.name,
+        'submission_count': len(g.submissions),
+        'created_at': g.created_at.isoformat()
+    } for g in groups])
+
+@app.route('/api/groups', methods=['POST'])
+def create_group():
+    """Create a new group"""
+    data = request.json
+    group_name = data.get('name', '').strip()
+    
+    if not group_name:
+        return jsonify({'error': 'Group name is required'}), 400
+    
+    if Group.query.filter_by(name=group_name).first():
+        return jsonify({'error': 'Group name already exists'}), 400
+    
+    group = Group(name=group_name)
+    db.session.add(group)
+    db.session.commit()
+    
+    return jsonify({
+        'id': group.id,
+        'name': group.name,
+        'created_at': group.created_at.isoformat()
+    })
+
 @app.route('/upload', methods=['POST'])
 def upload():
+    """Upload data to a group"""
     if 'file' not in request.files:
         return jsonify({'error': 'No file uploaded'}), 400
     
@@ -174,7 +256,14 @@ def upload():
     if file.filename == '':
         return jsonify({'error': 'No file selected'}), 400
     
-    # Check file extension
+    group_id = request.form.get('group_id')
+    if not group_id:
+        return jsonify({'error': 'Group selection is required'}), 400
+    
+    group = Group.query.get(group_id)
+    if not group:
+        return jsonify({'error': 'Group not found'}), 404
+    
     allowed_extensions = ['.csv', '.txt']
     if not any(file.filename.lower().endswith(ext) for ext in allowed_extensions):
         return jsonify({'error': 'Only CSV and TXT files are allowed'}), 400
@@ -186,9 +275,54 @@ def upload():
         if len(df) == 0:
             return jsonify({'error': 'No valid data found in file'}), 400
         
-        bin_width = float(request.form.get('bin_width', 0)) or None
-        log_scale = request.form.get('log_scale') == 'true'
-        view_mode = request.form.get('view_mode', 'all')
+        # Create submission
+        submission = Submission(
+            group_id=group_id,
+            filename=file.filename
+        )
+        db.session.add(submission)
+        db.session.flush()
+        
+        # Add data entries
+        for _, row in df.iterrows():
+            entry = DataEntry(
+                submission_id=submission.id,
+                invariant_mass=float(row['invariant_mass']),
+                particle_type=int(row['particle_type']),
+                combination=str(row['combination'])
+            )
+            db.session.add(entry)
+        
+        db.session.commit()
+        
+        return jsonify({
+            'message': 'Data submitted successfully',
+            'submission_id': submission.id,
+            'entries_count': len(df)
+        })
+    
+    except Exception as e:
+        db.session.rollback()
+        import traceback
+        print(f"Error: {str(e)}")
+        print(f"Traceback: {traceback.format_exc()}")
+        return jsonify({'error': f'Error processing file: {str(e)}'}), 500
+
+@app.route('/analyze', methods=['POST'])
+def analyze():
+    """Analyze data for a group or all groups"""
+    try:
+        data = request.json
+        group_id = data.get('group_id')
+        num_bins = data.get('num_bins', 30)
+        log_scale = data.get('log_scale', False)
+        view_mode = data.get('view_mode', 'all')
+        
+        # Get data from database
+        df = get_dataframe_from_db(group_id)
+        
+        if len(df) == 0:
+            return jsonify({'error': 'No data available'}), 400
         
         # Create histograms
         plots = {}
@@ -197,21 +331,21 @@ def upload():
             plots['dilepton'] = create_histogram(
                 df, [1, 2], 
                 'Dilepton Invariant Mass Distribution', 
-                bin_width, log_scale, show_total=True
+                num_bins, log_scale, show_total=True
             )
         
         if view_mode in ['all', 'fourlepton']:
             plots['fourlepton'] = create_histogram(
                 df, ['4ee', '4mm', '4me'], 
                 'Four Lepton Invariant Mass Distribution', 
-                bin_width, log_scale, show_total=False
+                num_bins, log_scale, show_total=False
             )
         
         if view_mode in ['all', 'diphoton']:
             plots['diphoton'] = create_histogram(
                 df, [3], 
                 'Diphoton Invariant Mass Distribution', 
-                bin_width, log_scale, show_total=False
+                num_bins, log_scale, show_total=False
             )
         
         # Calculate statistics
@@ -225,16 +359,16 @@ def upload():
                 'electrons': electron_stats,
                 'muons': muon_stats,
                 'photons': photon_stats
-            }
+            },
+            'total_entries': len(df)
         })
     
     except Exception as e:
         import traceback
-        error_msg = str(e)
-        traceback_msg = traceback.format_exc()
-        print(f"Error: {error_msg}")
-        print(f"Traceback: {traceback_msg}")
-        return jsonify({'error': f'Error processing file: {error_msg}'}), 500
+        print(f"Error: {str(e)}")
+        print(f"Traceback: {traceback.format_exc()}")
+        return jsonify({'error': f'Error analyzing data: {str(e)}'}), 500
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port, debug=False)

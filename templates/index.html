@@ -35,7 +35,43 @@
             font-size: 2.5em;
         }
         
-        .upload-section {
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 30px;
+            border-bottom: 2px solid #e0e0e0;
+        }
+        
+        .tab {
+            padding: 12px 24px;
+            background: none;
+            border: none;
+            border-bottom: 3px solid transparent;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+            color: #666;
+            transition: all 0.3s;
+        }
+        
+        .tab:hover {
+            color: #667eea;
+        }
+        
+        .tab.active {
+            color: #667eea;
+            border-bottom-color: #667eea;
+        }
+        
+        .tab-content {
+            display: none;
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
+        
+        .section {
             background: #f8f9fa;
             padding: 25px;
             border-radius: 10px;
@@ -62,6 +98,7 @@
         
         input[type="file"],
         input[type="number"],
+        input[type="text"],
         select {
             padding: 10px;
             border: 2px solid #ddd;
@@ -72,6 +109,7 @@
         
         input[type="file"]:hover,
         input[type="number"]:focus,
+        input[type="text"]:focus,
         select:focus {
             border-color: #667eea;
             outline: none;
@@ -111,6 +149,48 @@
             background: #ccc;
             cursor: not-allowed;
             transform: none;
+        }
+        
+        .button-secondary {
+            background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+        }
+        
+        .group-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
+        }
+        
+        .group-card {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            border: 2px solid #e0e0e0;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        .group-card:hover {
+            border-color: #667eea;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        }
+        
+        .group-card.selected {
+            border-color: #667eea;
+            background: #f0f4ff;
+        }
+        
+        .group-card h3 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+        
+        .group-card p {
+            color: #666;
+            font-size: 14px;
+            margin: 5px 0;
         }
         
         .plots-container {
@@ -181,6 +261,15 @@
             display: none;
         }
         
+        .success {
+            background: #28a745;
+            color: white;
+            padding: 15px;
+            border-radius: 5px;
+            margin-top: 20px;
+            display: none;
+        }
+        
         .loading {
             text-align: center;
             padding: 20px;
@@ -201,80 +290,338 @@
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
+        
+        .info-banner {
+            background: #e3f2fd;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+            border-left: 4px solid #2196f3;
+        }
+        
+        .info-banner h3 {
+            color: #1976d2;
+            margin-bottom: 5px;
+        }
+        
+        .info-banner p {
+            color: #555;
+            margin: 5px 0;
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>⚛️ Particle Physics Data Analysis</h1>
         
-        <div class="upload-section">
-            <form id="uploadForm" enctype="multipart/form-data">
+        <div class="tabs">
+            <button class="tab active" onclick="switchTab('upload')">Upload Data</button>
+            <button class="tab" onclick="switchTab('analyze')">Analyze Data</button>
+            <button class="tab" onclick="switchTab('groups')">Manage Groups</button>
+        </div>
+        
+        <!-- Upload Tab -->
+        <div id="upload-tab" class="tab-content active">
+            <div class="section">
+                <h2>Upload Data to Group</h2>
+                
                 <div class="control-item">
-                    <label for="file">Upload CSV or TXT File:</label>
-                    <input type="file" id="file" name="file" accept=".csv,.txt" required>
+                    <label>Select Group:</label>
+                    <div id="upload-groups" class="group-list"></div>
                 </div>
                 
-                <div class="control-group">
+                <form id="uploadForm" enctype="multipart/form-data">
                     <div class="control-item">
-                        <label for="num_bins">Number of Bins:</label>
-                        <input type="number" id="num_bins" name="num_bins" step="1" min="1" value="20">
+                        <label for="file">Upload CSV or TXT File:</label>
+                        <input type="file" id="file" name="file" accept=".csv,.txt" required>
                     </div>
                     
-                    <div class="control-item">
-                        <label for="view_mode">View Mode:</label>
-                        <select id="view_mode" name="view_mode">
-                            <option value="all">All Plots</option>
-                            <option value="dilepton">Dilepton Only</option>
-                            <option value="fourlepton">Four Lepton Only</option>
-                            <option value="diphoton">Diphoton Only</option>
-                        </select>
-                    </div>
-                    
-                    <div class="control-item">
-                        <div class="checkbox-group">
-                            <input type="checkbox" id="log_scale" name="log_scale">
-                            <label for="log_scale" style="margin: 0;">Logarithmic X-Axis</label>
-                        </div>
-                    </div>
-                </div>
+                    <button type="submit">Submit to Group</button>
+                </form>
                 
-                <button type="submit">Analyze Data</button>
-            </form>
-            
-            <div class="error" id="error"></div>
-            <div class="loading" id="loading">
-                <div class="spinner"></div>
-                <p>Processing data...</p>
+                <div class="error" id="upload-error"></div>
+                <div class="success" id="upload-success"></div>
+                <div class="loading" id="upload-loading">
+                    <div class="spinner"></div>
+                    <p>Uploading data...</p>
+                </div>
             </div>
         </div>
         
-        <div class="plots-container" id="plots"></div>
+        <!-- Analyze Tab -->
+        <div id="analyze-tab" class="tab-content">
+            <div class="section">
+                <h2>Analyze Data</h2>
+                
+                <div class="info-banner">
+                    <h3>Data Scope</h3>
+                    <p id="analyze-scope">Select a group to analyze or view all data</p>
+                </div>
+                
+                <div class="control-item">
+                    <label>Select Data Source:</label>
+                    <div style="margin-bottom: 10px;">
+                        <button class="button-secondary" onclick="selectAllData()">All Groups Combined</button>
+                    </div>
+                    <div id="analyze-groups" class="group-list"></div>
+                </div>
+                
+                <form id="analyzeForm">
+                    <div class="control-group">
+                        <div class="control-item">
+                            <label for="analyze_num_bins">Number of Bins:</label>
+                            <input type="number" id="analyze_num_bins" name="num_bins" step="1" min="1" value="30">
+                        </div>
+                        
+                        <div class="control-item">
+                            <label for="analyze_view_mode">View Mode:</label>
+                            <select id="analyze_view_mode" name="view_mode">
+                                <option value="all">All Plots</option>
+                                <option value="dilepton">Dilepton Only</option>
+                                <option value="fourlepton">Four Lepton Only</option>
+                                <option value="diphoton">Diphoton Only</option>
+                            </select>
+                        </div>
+                        
+                        <div class="control-item">
+                            <div class="checkbox-group">
+                                <input type="checkbox" id="analyze_log_scale" name="log_scale">
+                                <label for="analyze_log_scale" style="margin: 0;">Logarithmic X-Axis</label>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <button type="submit">Generate Plots</button>
+                </form>
+                
+                <div class="error" id="analyze-error"></div>
+                <div class="loading" id="analyze-loading">
+                    <div class="spinner"></div>
+                    <p>Analyzing data...</p>
+                </div>
+            </div>
+            
+            <div class="plots-container" id="plots"></div>
+            
+            <div class="statistics" id="statistics" style="display: none;">
+                <h2>Statistical Analysis by Energy Range</h2>
+                <div class="stats-grid" id="statsGrid"></div>
+            </div>
+        </div>
         
-        <div class="statistics" id="statistics" style="display: none;">
-            <h2>Statistical Analysis by Energy Range</h2>
-            <div class="stats-grid" id="statsGrid"></div>
+        <!-- Groups Tab -->
+        <div id="groups-tab" class="tab-content">
+            <div class="section">
+                <h2>Create New Group</h2>
+                
+                <form id="createGroupForm">
+                    <div class="control-item">
+                        <label for="group_name">Group Name:</label>
+                        <input type="text" id="group_name" name="group_name" required placeholder="e.g., Team A, Experiment 1">
+                    </div>
+                    
+                    <button type="submit">Create Group</button>
+                </form>
+                
+                <div class="error" id="group-error"></div>
+                <div class="success" id="group-success"></div>
+            </div>
+            
+            <div class="section">
+                <h2>Existing Groups</h2>
+                <div id="groups-list" class="group-list"></div>
+            </div>
         </div>
     </div>
     
     <script>
+        let selectedUploadGroup = null;
+        let selectedAnalyzeGroup = null;
+        let groups = [];
+        
+        // Tab switching
+        function switchTab(tabName) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+            
+            event.target.classList.add('active');
+            document.getElementById(`${tabName}-tab`).classList.add('active');
+            
+            if (tabName === 'upload' || tabName === 'analyze' || tabName === 'groups') {
+                loadGroups();
+            }
+        }
+        
+        // Load groups from server
+        async function loadGroups() {
+            try {
+                const response = await fetch('/api/groups');
+                groups = await response.json();
+                
+                displayUploadGroups();
+                displayAnalyzeGroups();
+                displayGroupsList();
+            } catch (error) {
+                console.error('Error loading groups:', error);
+            }
+        }
+        
+        function displayUploadGroups() {
+            const container = document.getElementById('upload-groups');
+            container.innerHTML = '';
+            
+            if (groups.length === 0) {
+                container.innerHTML = '<p style="color: #999;">No groups available. Create one in the "Manage Groups" tab.</p>';
+                return;
+            }
+            
+            groups.forEach(group => {
+                const card = document.createElement('div');
+                card.className = 'group-card';
+                if (selectedUploadGroup === group.id) {
+                    card.classList.add('selected');
+                }
+                
+                card.innerHTML = `
+                    <h3>${group.name}</h3>
+                    <p>Submissions: ${group.submission_count}</p>
+                `;
+                
+                card.onclick = () => {
+                    selectedUploadGroup = group.id;
+                    displayUploadGroups();
+                };
+                
+                container.appendChild(card);
+            });
+        }
+        
+        function displayAnalyzeGroups() {
+            const container = document.getElementById('analyze-groups');
+            container.innerHTML = '';
+            
+            if (groups.length === 0) {
+                container.innerHTML = '<p style="color: #999;">No groups available.</p>';
+                return;
+            }
+            
+            groups.forEach(group => {
+                const card = document.createElement('div');
+                card.className = 'group-card';
+                if (selectedAnalyzeGroup === group.id) {
+                    card.classList.add('selected');
+                }
+                
+                card.innerHTML = `
+                    <h3>${group.name}</h3>
+                    <p>Submissions: ${group.submission_count}</p>
+                `;
+                
+                card.onclick = () => {
+                    selectedAnalyzeGroup = group.id;
+                    displayAnalyzeGroups();
+                    updateAnalyzeScope();
+                };
+                
+                container.appendChild(card);
+            });
+        }
+        
+        function displayGroupsList() {
+            const container = document.getElementById('groups-list');
+            container.innerHTML = '';
+            
+            if (groups.length === 0) {
+                container.innerHTML = '<p style="color: #999;">No groups created yet.</p>';
+                return;
+            }
+            
+            groups.forEach(group => {
+                const card = document.createElement('div');
+                card.className = 'group-card';
+                
+                const date = new Date(group.created_at).toLocaleDateString();
+                
+                card.innerHTML = `
+                    <h3>${group.name}</h3>
+                    <p>Created: ${date}</p>
+                    <p>Submissions: ${group.submission_count}</p>
+                `;
+                
+                container.appendChild(card);
+            });
+        }
+        
+        function selectAllData() {
+            selectedAnalyzeGroup = null;
+            displayAnalyzeGroups();
+            updateAnalyzeScope();
+        }
+        
+        function updateAnalyzeScope() {
+            const scopeEl = document.getElementById('analyze-scope');
+            if (selectedAnalyzeGroup === null) {
+                scopeEl.textContent = 'Viewing all data from all groups';
+            } else {
+                const group = groups.find(g => g.id === selectedAnalyzeGroup);
+                scopeEl.textContent = `Viewing data from group: ${group ? group.name : 'Unknown'}`;
+            }
+        }
+        
+        // Create group form
+        document.getElementById('createGroupForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const groupName = document.getElementById('group_name').value.trim();
+            
+            document.getElementById('group-error').style.display = 'none';
+            document.getElementById('group-success').style.display = 'none';
+            
+            try {
+                const response = await fetch('/api/groups', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ name: groupName })
+                });
+                
+                const data = await response.json();
+                
+                if (!response.ok) {
+                    throw new Error(data.error || 'Failed to create group');
+                }
+                
+                document.getElementById('group-success').textContent = `Group "${groupName}" created successfully!`;
+                document.getElementById('group-success').style.display = 'block';
+                document.getElementById('group_name').value = '';
+                
+                loadGroups();
+            } catch (error) {
+                document.getElementById('group-error').textContent = error.message;
+                document.getElementById('group-error').style.display = 'block';
+            }
+        });
+        
+        // Upload form
         document.getElementById('uploadForm').addEventListener('submit', async (e) => {
             e.preventDefault();
             
+            if (!selectedUploadGroup) {
+                document.getElementById('upload-error').textContent = 'Please select a group first';
+                document.getElementById('upload-error').style.display = 'block';
+                return;
+            }
+            
             const formData = new FormData();
             const fileInput = document.getElementById('file');
-            const numBins = document.getElementById('num_bins').value;
-            const logScale = document.getElementById('log_scale').checked;
-            const viewMode = document.getElementById('view_mode').value;
             
             formData.append('file', fileInput.files[0]);
-            formData.append('num_bins', numBins);
-            formData.append('log_scale', logScale);
-            formData.append('view_mode', viewMode);
+            formData.append('group_id', selectedUploadGroup);
             
-            document.getElementById('error').style.display = 'none';
-            document.getElementById('loading').style.display = 'block';
-            document.getElementById('plots').innerHTML = '';
-            document.getElementById('statistics').style.display = 'none';
+            document.getElementById('upload-error').style.display = 'none';
+            document.getElementById('upload-success').style.display = 'none';
+            document.getElementById('upload-loading').style.display = 'block';
             
             try {
                 const response = await fetch('/upload', {
@@ -285,10 +632,57 @@
                 const data = await response.json();
                 
                 if (!response.ok) {
-                    throw new Error(data.error || 'An error occurred');
+                    throw new Error(data.error || 'Upload failed');
                 }
                 
-                document.getElementById('loading').style.display = 'none';
+                document.getElementById('upload-loading').style.display = 'none';
+                document.getElementById('upload-success').textContent = 
+                    `Successfully uploaded ${data.entries_count} entries to the group!`;
+                document.getElementById('upload-success').style.display = 'block';
+                
+                fileInput.value = '';
+                loadGroups();
+            } catch (error) {
+                document.getElementById('upload-loading').style.display = 'none';
+                document.getElementById('upload-error').textContent = error.message;
+                document.getElementById('upload-error').style.display = 'block';
+            }
+        });
+        
+        // Analyze form
+        document.getElementById('analyzeForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const numBins = parseInt(document.getElementById('analyze_num_bins').value);
+            const logScale = document.getElementById('analyze_log_scale').checked;
+            const viewMode = document.getElementById('analyze_view_mode').value;
+            
+            document.getElementById('analyze-error').style.display = 'none';
+            document.getElementById('analyze-loading').style.display = 'block';
+            document.getElementById('plots').innerHTML = '';
+            document.getElementById('statistics').style.display = 'none';
+            
+            try {
+                const response = await fetch('/analyze', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        group_id: selectedAnalyzeGroup,
+                        num_bins: numBins,
+                        log_scale: logScale,
+                        view_mode: viewMode
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (!response.ok) {
+                    throw new Error(data.error || 'Analysis failed');
+                }
+                
+                document.getElementById('analyze-loading').style.display = 'none';
                 
                 // Display plots
                 const plotsContainer = document.getElementById('plots');
@@ -321,9 +715,9 @@
                 displayStatistics(data.statistics);
                 
             } catch (error) {
-                document.getElementById('loading').style.display = 'none';
-                document.getElementById('error').textContent = error.message;
-                document.getElementById('error').style.display = 'block';
+                document.getElementById('analyze-loading').style.display = 'none';
+                document.getElementById('analyze-error').textContent = error.message;
+                document.getElementById('analyze-error').style.display = 'block';
             }
         });
         
@@ -374,6 +768,9 @@
             
             document.getElementById('statistics').style.display = 'block';
         }
+        
+        // Load groups on page load
+        loadGroups();
     </script>
 </body>
 </html>
