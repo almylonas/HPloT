@@ -45,15 +45,19 @@ def parse_csv(file_content):
     # Convert particle_type to int
     df['particle_type'] = df['particle_type'].astype(int)
     
-    # Fill NaN in combination column with empty string
-    df['combination'] = df['combination'].fillna('').astype(str).str.strip()
+    # Fill NaN in combination column with empty string and ensure it's string type
+    df['combination'] = df['combination'].fillna('').astype(str).str.strip().str.lower()
+    
+    # Debug: print unique combinations
+    print("Unique combinations found:", df['combination'].unique())
     
     return df
 
-def calculate_statistics(df, particle_types):
-    """Calculate statistics for energy ranges"""
-    # Filter by particle_type
-    filtered_df = df[df['particle_type'].isin(particle_types)]
+def calculate_statistics(df, combination_filter):
+    """Calculate statistics for energy ranges based on combination column"""
+    # Filter by combination column (e.g., 'ee', 'mm', 'gg')
+    # Ensure combination column is string type and handle empty values
+    filtered_df = df[df['combination'].astype(str).str.lower() == combination_filter.lower()]
     
     stats = []
     total_events = len(filtered_df)
@@ -63,6 +67,12 @@ def calculate_statistics(df, particle_types):
                                (filtered_df['invariant_mass'] <= max_e)]
         events = len(range_df)
         mean = range_df['invariant_mass'].mean() if events > 0 else 0
+        
+        # Debug: print the actual values in this range
+        if events > 0:
+            values = range_df['invariant_mass'].values.tolist()
+            print(f"{range_name} for {combination_filter}: {values}")
+        
         stats.append({
             'range': f"{range_name} ({min_e}-{max_e} GeV)",
             'events': events,
@@ -221,9 +231,9 @@ def upload():
             )
         
         # Calculate statistics
-        electron_stats = calculate_statistics(df, [1])
-        muon_stats = calculate_statistics(df, [2])
-        photon_stats = calculate_statistics(df, [3])
+        electron_stats = calculate_statistics(df, 'e')
+        muon_stats = calculate_statistics(df, 'm')
+        photon_stats = calculate_statistics(df, 'g')
         
         return jsonify({
             'plots': plots,
