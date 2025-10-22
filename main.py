@@ -98,7 +98,10 @@ def create_histogram(df, particle_types, title, num_bins, log_scale, show_total=
     }
     
     # Use provided number of bins or default to 20
-    bins = int(num_bins) if num_bins and num_bins > 0 else 20
+    try:
+        bins = int(num_bins) if num_bins and int(num_bins) > 0 else 20
+    except (ValueError, TypeError):
+        bins = 20
     
     # For dilepton with total, use stacked mode
     if show_total:
@@ -129,6 +132,7 @@ def create_histogram(df, particle_types, title, num_bins, log_scale, show_total=
                 label = labels.get(ptype, str(ptype))
                 color = colors.get(ptype, 'gray')
             else:
+                # Handle string particle types (e.g., '4ee', '4mm', '4me')
                 filtered_df = df[df['combination'].str.lower() == ptype.lower()]
                 label = ptype.upper()
                 color = colors.get(ptype.lower(), 'gray')
@@ -155,9 +159,10 @@ def create_histogram(df, particle_types, title, num_bins, log_scale, show_total=
         height=500
     )
     
+    # FIXED: Only apply log scale to X-axis, not Y-axis
     if log_scale:
         fig.update_xaxes(type='log')
-        fig.update_yaxes(type='log')
+        # Removed: fig.update_yaxes(type='log')
     
     return json.dumps(fig, cls=plotly.utils.PlotlyJSONEncoder)
 
@@ -186,7 +191,8 @@ def upload():
         if len(df) == 0:
             return jsonify({'error': 'No valid data found in file'}), 400
         
-        bin_width = float(request.form.get('bin_width', 0)) or None
+        # Fixed: Changed from bin_width to num_bins
+        num_bins = request.form.get('num_bins', 20)
         log_scale = request.form.get('log_scale') == 'true'
         view_mode = request.form.get('view_mode', 'all')
         
@@ -197,21 +203,21 @@ def upload():
             plots['dilepton'] = create_histogram(
                 df, [1, 2], 
                 'Dilepton Invariant Mass Distribution', 
-                bin_width, log_scale, show_total=True
+                num_bins, log_scale, show_total=True
             )
         
         if view_mode in ['all', 'fourlepton']:
             plots['fourlepton'] = create_histogram(
                 df, ['4ee', '4mm', '4me'], 
                 'Four Lepton Invariant Mass Distribution', 
-                bin_width, log_scale, show_total=False
+                num_bins, log_scale, show_total=False
             )
         
         if view_mode in ['all', 'diphoton']:
             plots['diphoton'] = create_histogram(
                 df, [3], 
                 'Diphoton Invariant Mass Distribution', 
-                bin_width, log_scale, show_total=False
+                num_bins, log_scale, show_total=False
             )
         
         # Calculate statistics
