@@ -1,5 +1,4 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-// Changed from '../../lib/db' to '../../../lib/db'
 import { getDb } from '../../../lib/db';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -18,11 +17,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   try {
     const sql = getDb();
 
-    const result = await sql`
+    // The fix: Cast the result to any[] so TypeScript allows .length
+    const result = (await sql`
       DELETE FROM datasets 
       WHERE id = ${numericId}
       RETURNING id
-    `;
+    `) as unknown as any[]; 
 
     if (result.length === 0) {
       return res.status(404).json({ error: 'Dataset not found' });
