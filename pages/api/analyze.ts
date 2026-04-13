@@ -1,6 +1,13 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { getDb } from '../../lib/db';
 
+// Define the shape of your database row for type safety
+interface EventRow {
+  invariant_mass: number;
+  particle_type: string;
+  combination: string;
+}
+
 const ENERGY_RANGES: Record<string, [number, number]> = {
   R1: [2, 4],
   R2: [7, 13],
@@ -19,72 +26,79 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     };
 
     const sql = getDb();
-
-    // Build dataset filter
     const isAll = datasetIds === 'all' || !datasetIds;
     const ids: number[] = isAll ? [] : (datasetIds as number[]);
 
-    // Fetch raw events (only invariant_mass, combination, particle_type needed for histograms)
-    let rows: any[];
+    // Fixed: Initialize as an empty array of EventRow
+    let rows: EventRow[] = [];
+
     if (isAll) {
-      rows = await sql`
+      // Use "as unknown as EventRow[]" to bypass the Result object type mismatch
+      rows = (await sql`
         SELECT invariant_mass, particle_type, combination FROM events
-      `;
-    } else if (ids.length === 0) {
-      return res.status(200).json({ bins: {}, stats: {} });
-    } else {
-      rows = await sql`
+      `) as unknown as EventRow[];
+    } else if (ids.length > 0) {
+      rows = (await sql`
         SELECT invariant_mass, particle_type, combination FROM events
         WHERE dataset_id = ANY(${ids})
-      `;
+      `) as unknown as EventRow[];
+    } else {
+      return res.status(200).json({ bins: {}, stats: {}, totalEvents: 0 });
     }
 
-    // ------ Histogram bins computation in JS ------
+    // ------ Histogram bins computation ------
     function buildBins(values: number[], nBins: number) {
       if (values.length === 0) return { x: [], y: [] };
       const min = Math.min(...values);
       const max = Math.max(...values);
+      
       if (min === max) return { x: [min], y: [values.length] };
+      
       const width = (max - min) / nBins;
       const counts = new Array(nBins).fill(0);
+      
       for (const v of values) {
         let idx = Math.floor((v - min) / width);
         if (idx >= nBins) idx = nBins - 1;
         counts[idx]++;
       }
+      
       const x = Array.from({ length: nBins }, (_, i) => +(min + (i + 0.5) * width).toFixed(4));
       return { x, y: counts };
     }
 
-    const dileptonE = rows.filter((r) => r.combination === 'e').map((r) => r.invariant_mass);
-    const dileptonM = rows.filter((r) => r.combination === 'm').map((r) => r.invariant_mass);
-    const fourEE = rows.filter((r) => r.combination === '4ee').map((r) => r.invariant_mass);
-    const fourMM = rows.filter((r) => r.combination === '4mm').map((r) => r.invariant_mass);
-    const fourME = rows.filter((r) => r.combination === '4me').map((r) => r.invariant_mass);
-    const diphoton = rows.filter((r) => r.combination === 'g').map((r) => r.invariant_mass);
+    // Helper to extract mass by combination type
+    const getMass = (type: string) => rows.filter(r => r.combination === type).map(r => r.invariant_mass);
 
     const bins = {
-      dileptonE: buildBins(dileptonE, numBins),
-      dileptonM: buildBins(dileptonM, numBins),
-      fourEE: buildBins(fourEE, numBins),
-      fourMM: buildBins(fourMM, numBins),
-      fourME: buildBins(fourME, numBins),
-      diphoton: buildBins(diphoton, numBins),
+      dileptonE: buildBins(getMass('e'), numBins),
+      dileptonM: buildBins(getMass('m'), numBins),
+      fourEE: buildBins(getMass('4ee'), numBins),
+      fourMM: buildBins(getMass('4mm'), numBins),
+      fourME: buildBins(getMass('4me'), numBins),
+      diphoton: buildBins(getMass('g'), numBins),
     };
 
     // ------ Statistics ------
     function rangeStats(values: number[]) {
       return Object.entries(ENERGY_RANGES).map(([name, [lo, hi]]) => {
         const filtered = values.filter((v) => v >= lo && v <= hi);
-        const mean = filtered.length > 0 ? filtered.reduce((a, b) => a + b, 0) / filtered.length : null;
-        return { range: `${name} (${lo}–${hi} GeV)`, events: filtered.length, mean: mean !== null ? +mean.toFixed(2) : 'N/A' };
+        const mean = filtered.length > 0 
+          ? filtered.reduce((a, b) => a + b, 0) / filtered.length 
+          : null;
+          
+        return { 
+          range: `${name} (${lo}–${hi} GeV)`, 
+          events: filtered.length, 
+          mean: mean !== null ? +mean.toFixed(2) : 'N/A' 
+        };
       });
     }
 
     const stats = {
-      electrons: rangeStats(dileptonE),
-      muons: rangeStats(dileptonM),
-      photons: rangeStats(diphoton),
+      electrons: rangeStats(getMass('e')),
+      muons: rangeStats(getMass('m')),
+      photons: rangeStats(getMass('g')),
     };
 
     return res.status(200).json({ bins, stats, totalEvents: rows.length });
