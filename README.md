@@ -26,23 +26,6 @@ Open http://localhost:3000
 
 ---
 
-## 3. Deploy to Vercel
-
-```bash
-npm i -g vercel
-vercel
-```
-
-In the Vercel dashboard → **Settings → Environment Variables**, add:
-
-| Name | Value |
-|------|-------|
-| `DATABASE_URL` | your Neon connection string |
-
-Vercel auto-detects Next.js — no extra configuration needed.
-
----
-
 ## Data format
 
 Upload `.csv` or `.txt` files with three columns (no header):
