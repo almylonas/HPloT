@@ -25,24 +25,34 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       RETURNING id
     `) as any;
 
-    // 2. Bulk insert in chunks using objects (required by Neon/Postgres sql() helper)
+    // 2. Bulk insert in chunks.
+    // The neon() tagged-template driver only accepts primitive scalar values —
+    // it does NOT support the postgres.js sql(arrayOfObjects) helper.
+    // Instead, we build a parameterized query string manually per chunk.
     const CHUNK_SIZE = 500;
-    const COLUMNS = ['dataset_id', 'invariant_mass', 'particle_type', 'combination'] as const;
 
     for (let i = 0; i < events.length; i += CHUNK_SIZE) {
       const chunk = events.slice(i, i + CHUNK_SIZE);
 
-      const values = chunk.map(e => ({
-        dataset_id: dataset.id,
-        invariant_mass: e.invariant_mass,
-        particle_type: e.particle_type,
-        combination: e.combination,
-      }));
+      // Build: ($1,$2,$3,$4), ($5,$6,$7,$8), ...
+      const placeholders = chunk
+        .map((_, idx) => {
+          const base = idx * 4;
+          return `($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4})`;
+        })
+        .join(', ');
 
-      await sql`
-        INSERT INTO events (dataset_id, invariant_mass, particle_type, combination)
-        VALUES ${(sql as any)(values, COLUMNS)}
-      `;
+      const values = chunk.flatMap(e => [
+        dataset.id,
+        e.invariant_mass,
+        e.particle_type,
+        e.combination,
+      ]);
+
+      await sql.query(
+        `INSERT INTO events (dataset_id, invariant_mass, particle_type, combination) VALUES ${placeholders}`,
+        values,
+      );
     }
 
     return res.status(200).json({ dataset });
