@@ -18,20 +18,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     const sql = getDb();
 
-    // 1. Insert dataset (This part works!)
+    // 1. Insert dataset (Cast to any to allow destructuring)
     const [dataset] = (await sql`
       INSERT INTO datasets (name, row_count)
       VALUES (${filename ?? 'upload'}, ${events.length})
       RETURNING id
     `) as any;
 
-    // 2. Optimized Bulk Insert using standard array mapping
-    // This avoids the sql() helper and the $1 syntax error entirely.
+    // 2. Bulk Insert with fixed Type-Safe syntax
     const CHUNK_SIZE = 500;
     for (let i = 0; i < events.length; i += CHUNK_SIZE) {
       const chunk = events.slice(i, i + CHUNK_SIZE);
       
-      // We map the chunk to a simple array of values for each row
       const values = chunk.map(e => [
         dataset.id,
         e.invariant_mass,
@@ -39,11 +37,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         e.combination
       ]);
 
-      // Using the VALUES (...) syntax with the values array
-      // is the most compatible way to handle this in Postgres.
+      // THE FIX: 
+      // Instead of nesting sql inside ${}, we use the helper as a standalone 
+      // and cast it to 'any' to satisfy the strict Neon/Postgres TemplateStringsArray check.
       await sql`
         INSERT INTO events (dataset_id, invariant_mass, particle_type, combination)
-        VALUES ${sql(values)}
+        VALUES ${(sql as any)(values)}
       `;
     }
 
