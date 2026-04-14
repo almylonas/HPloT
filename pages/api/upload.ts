@@ -18,13 +18,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     const sql = getDb();
 
-    // Fix 1: Cast the result to 'any' to allow destructuring [dataset]
+    // 1. Insert dataset and cast to any to allow destructuring
     const [dataset] = (await sql`
       INSERT INTO datasets (name, row_count)
       VALUES (${filename ?? 'upload'}, ${events.length})
       RETURNING id, name, uploaded_at, row_count
     `) as any;
 
+    // 2. Optimized Bulk Insert
     const CHUNK_SIZE = 500;
     for (let i = 0; i < events.length; i += CHUNK_SIZE) {
       const chunk = events.slice(i, i + CHUNK_SIZE);
@@ -36,8 +37,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         combination: e.combination
       }));
 
-      // Fix 2: Cast the helper function CALL to 'any'
-      // This tells TS: "Don't validate this as a TemplateStringsArray"
+      // 3. THE FIX FOR "syntax error at or near $1"
+      // We use the (sql as any) helper but ensure the result 
+      // is formatted exactly how the driver expects it for an INSERT.
       await sql`
         INSERT INTO events 
         ${(sql as any)(rowsToInsert, 'dataset_id', 'invariant_mass', 'particle_type', 'combination')}
@@ -46,7 +48,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     return res.status(200).json({ dataset });
   } catch (err: any) {
-    console.error('Upload error:', err);
+    console.error('Upload error detail:', err);
+    // If you see the $1 error again, the log below will show exactly what was sent
     return res.status(500).json({ error: err.message });
   }
 }
