@@ -278,6 +278,34 @@ export default function Home() {
 
         .page { position: relative; z-index: 1; max-width: 1400px; margin: 0 auto; padding: 24px 20px 60px; }
 
+        /* ── Nav ── */
+        .nav-link {
+          font-family: var(--mono);
+          font-size: 0.72rem;
+          letter-spacing: 2px;
+          text-transform: uppercase;
+          color: var(--muted);
+          text-decoration: none;
+          border: 1px solid var(--border);
+          border-radius: 100px;
+          padding: 5px 14px;
+          transition: all .15s;
+          margin-left: auto;
+        }
+        .nav-link:hover { border-color: var(--accent); color: var(--accent); }
+
+        /* ── Footer ── */
+        .footer {
+          position: relative; z-index: 1;
+          text-align: center;
+          padding: 24px 20px;
+          font-family: var(--mono);
+          font-size: 0.7rem;
+          color: var(--muted);
+          border-top: 1px solid var(--border);
+          letter-spacing: 1px;
+        }
+
         /* ── Header ── */
         .header {
           display: flex;
@@ -535,6 +563,7 @@ export default function Home() {
         <div className="header">
           <h1>HPlot</h1>
           <span className="header-tag">Invariant Mass Explorer · LHC Open Data</span>
+          <a href="/about" className="nav-link">About</a>
         </div>
 
         {/* Upload panel */}
@@ -700,6 +729,7 @@ export default function Home() {
           </div>
         )}
       </div>
+      <footer className="footer">© 2026 HPlot</footer>
     </>
   );
 }
