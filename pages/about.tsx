@@ -155,7 +155,8 @@ export default function About() {
             <span className="highlight">HPlot</span> is a modern alternative of{' '}
             <span className="highlight2">OPlot</span>, which is the plotting-tool for hands-on
             CERN masterclasses, providing the same functions with a more responsive and
-            user-friendly approach.
+            user-friendly approach. Users can upload the datasets they acquired from Hypatia and
+            upload the to this platform to view the respective histograms, both individual and cumulative ones. It was created by Alexandros Mylonas
           </p>
         </div>
       </div>
