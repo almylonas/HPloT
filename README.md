@@ -1,6 +1,6 @@
 # HPlot — Invariant Mass Explorer
 
-A Next.js web app for visualising LHC invariant mass datasets, backed by Neon PostgreSQL.
+A web app for visualising LHC invariant mass datasets created in Hypatia, backed by Neon PostgreSQL.
 
 ---
 
